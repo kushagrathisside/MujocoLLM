@@ -28,3 +28,5 @@ export function BodyTreeNode({node,onSelect,selected}){
     </div>
   );
 }
+
+export default BodyTreeNode;

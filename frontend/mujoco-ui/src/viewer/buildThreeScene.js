@@ -1,4 +1,8 @@
 
+import * as THREE from "three";
+
+import { peu, prgba, psz, pv } from "./math";
+
 // ── Build Three.js scene with optional joint angles ───────────────────────────
 export function buildThreeScene(scene, xmlDoc, materials, selectedBody, jointAngles={}) {
   const toRemove=[];

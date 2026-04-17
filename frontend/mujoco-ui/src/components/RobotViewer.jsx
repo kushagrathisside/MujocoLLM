@@ -1,9 +1,10 @@
-import { useState, useRef, useEffect, useMemo } from "react"
-import * as THREE from "three"
+import { useEffect, useMemo, useRef } from "react";
+import * as THREE from "three";
 
-import { buildThreeScene } from "../viewer/buildThreeScene"
-import { addJointAxes } from "../viewer/addJointAxes"
-import { kinematicStep } from "../viewer/kinematicStep"
+import { addJointAxes } from "../viewer/addJointAxes";
+import { buildThreeScene } from "../viewer/buildThreeScene";
+import { prgba } from "../viewer/math";
+import { kinematicStep } from "../viewer/kinematicStep";
 // ─────────────────────────────────────────────────────────────────────────────
 // 3D VIEWER — now with showAxes + simulating props
 // ─────────────────────────────────────────────────────────────────────────────
@@ -15,17 +16,18 @@ export function RobotViewer({validationResult, selectedBody, showAxes, simulatin
   const isDragging=useRef(false),lastMouse=useRef({x:0,y:0}),sph=useRef({theta:0.6,phi:1.1,r:3.5});
   const simTimeRef=useRef(0);
   const simulatingRef=useRef(simulating);
+  const xmlDoc=validationResult?.doc ?? null;
   useEffect(()=>{simulatingRef.current=simulating;},[simulating]);
 
   const materials=useMemo(()=>{
-    if(!validationResult?.doc)return{};
+    if(!xmlDoc)return{};
     const m={};
-    validationResult.doc.querySelectorAll("material").forEach(el=>{
+    xmlDoc.querySelectorAll("material").forEach(el=>{
       const nm=el.getAttribute("name"),rgba=el.getAttribute("rgba");
       if(nm&&rgba)m[nm]=prgba(rgba);
     });
     return m;
-  },[validationResult?.doc]);
+  },[xmlDoc]);
 
   useEffect(()=>{
     const el=mountRef.current;if(!el)return;
@@ -52,7 +54,9 @@ export function RobotViewer({validationResult, selectedBody, showAxes, simulatin
         const doc=sceneRef.current?.userData?.xmlDoc;
         if(doc){
           const angles=kinematicStep(doc,simTimeRef.current,{});
-          try{buildThreeScene(scene,doc,sceneRef.current.userData.materials||{},sceneRef.current.userData.selectedBody,angles);}catch(e){}
+          try{buildThreeScene(scene,doc,sceneRef.current.userData.materials||{},sceneRef.current.userData.selectedBody,angles);}catch{
+            // Keep the render loop alive even if one incremental scene rebuild fails.
+          }
           addJointAxes(scene,doc,sceneRef.current.userData.showAxes);
         }
       }
@@ -72,18 +76,28 @@ export function RobotViewer({validationResult, selectedBody, showAxes, simulatin
     el.addEventListener("mousedown",onDown);el.addEventListener("mouseup",onUp);
     el.addEventListener("mouseleave",onUp);el.addEventListener("mousemove",onMove);
     el.addEventListener("wheel",onWheel,{passive:true});window.addEventListener("resize",onResize);
-    return()=>{cancelAnimationFrame(animRef.current);renderer.dispose();el.innerHTML="";window.removeEventListener("resize",onResize);};
+    return()=>{
+      cancelAnimationFrame(animRef.current);
+      el.removeEventListener("mousedown",onDown);
+      el.removeEventListener("mouseup",onUp);
+      el.removeEventListener("mouseleave",onUp);
+      el.removeEventListener("mousemove",onMove);
+      el.removeEventListener("wheel",onWheel);
+      window.removeEventListener("resize",onResize);
+      renderer.dispose();
+      el.innerHTML="";
+    };
   },[]);
 
   // Rebuild scene when xml/axes/selectedBody changes
   useEffect(()=>{
-    if(!sceneRef.current||!validationResult?.doc)return;
-    sceneRef.current.userData={xmlDoc:validationResult.doc,materials,selectedBody,showAxes};
+    if(!sceneRef.current||!xmlDoc)return;
+    sceneRef.current.userData={xmlDoc,materials,selectedBody,showAxes};
     if(!simulatingRef.current){
-      try{buildThreeScene(sceneRef.current,validationResult.doc,materials,selectedBody,{});}catch(e){console.warn(e);}
-      addJointAxes(sceneRef.current,validationResult.doc,showAxes);
+      try{buildThreeScene(sceneRef.current,xmlDoc,materials,selectedBody,{});}catch(error){console.warn(error);}
+      addJointAxes(sceneRef.current,xmlDoc,showAxes);
     }
-  },[validationResult?.doc,materials,selectedBody,showAxes]);
+  },[xmlDoc,materials,selectedBody,showAxes]);
 
   return(
     <div style={{position:"relative",width:"100%",height:"100%"}}>

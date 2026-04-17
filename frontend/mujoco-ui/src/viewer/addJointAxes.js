@@ -1,4 +1,8 @@
 
+import * as THREE from "three";
+
+import { dtr, peu, pv } from "./math";
+
 // ── Feature: Joint Axis Arrows ───────────────────────────────────────────────
 export function addJointAxes(scene, xmlDoc, showAxes) {
   const toRemove=[];

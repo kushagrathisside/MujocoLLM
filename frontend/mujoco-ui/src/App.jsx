@@ -1,278 +1,21 @@
-import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { validateMuJoCoXML } from "./utils/xmlValidator";
+import BodyTreeNode from "./components/BodyTree";
+import DiffViewer from "./components/DiffViewer";
+import RobotViewer from "./components/RobotViewer";
+import { Toast } from "./components/Toast";
+import XMLViewer from "./components/XMLViewer";
+import { DEFAULT_XML, PROVIDERS, loadStoredConfig } from "./editorConfig";
+import AboutDeveloperModal from "./modals/AboutDeveloperModal";
+import MacroModal from "./modals/MacroModal";
+import PythonExportModal from "./modals/PythonExportModal";
+import SettingsModal from "./modals/SettingsModal";
+import SnippetModal from "./modals/SnippetModal";
+import UserManualModal from "./modals/UserManualModal";
+import { parseBodyTree } from "./utils/bodyTreeParser";
 import { computeDiff } from "./utils/xmlDiff";
 import { buildXMLSummary } from "./utils/xmlSummary";
-import { parseBodyTree } from "./utils/bodyTreeParser";
-import { highlightXML } from "./utils/highlightXML";
-
-import ChatPanel from "./components/ChatPanel"
-import RobotViewer from "./components/RobotViewer"
-import XMLViewer from "./components/XMLViewer"
-import DiffViewer from "./components/DiffViewer"
-import BodyTreeNode from "./components/BodyTree"
-import { Toast } from "./components/Toast";
-import { ValidationPanel } from "./components/ValidationPanel"; 
-
-import InfoPanel from "./panels/InfoPanel"
-import HistoryPanel from "./panels/HistoryPanel"
-
-import SnippetModal from "./modals/SnippetModal"
-import MacroModal from "./modals/MacroModal"
-import SettingsModal from "./modals/SettingsModal"
-import PythonExportModal from "./modals/PythonExportModal"
-
-
-// ─────────────────────────────────────────────────────────────────────────────
-// PROVIDERS
-// ─────────────────────────────────────────────────────────────────────────────
-const PROVIDERS = {
-  ollama:    { label:"Ollama",    icon:"🦙", color:"#a78bfa", needsKey:false, models:[], defaultModel:"qwen2.5:7b" },
-  anthropic: { label:"Anthropic", icon:"◆",  color:"#f97316", needsKey:true,
-               models:["claude-sonnet-4-20250514","claude-opus-4-20250514","claude-haiku-4-5-20251001"], defaultModel:"claude-sonnet-4-20250514" },
-  openai:    { label:"OpenAI",    icon:"⬡",  color:"#22c55e", needsKey:true,
-               models:["gpt-4o","gpt-4o-mini","gpt-4-turbo"], defaultModel:"gpt-4o" },
-  gemini:    { label:"Gemini",    icon:"✦",  color:"#3b82f6", needsKey:true,
-               models:["gemini-1.5-pro","gemini-1.5-flash","gemini-2.0-flash"], defaultModel:"gemini-1.5-pro" },
-  groq:      { label:"Groq",      icon:"⚡",  color:"#eab308", needsKey:true,
-               models:["llama-3.3-70b-versatile","mixtral-8x7b-32768","llama3-70b-8192"], defaultModel:"llama-3.3-70b-versatile" },
-};
-
-// ─────────────────────────────────────────────────────────────────────────────
-// DEFAULT XML
-// ─────────────────────────────────────────────────────────────────────────────
-const DEFAULT_XML = `<mujoco model="simple_robot">
-  <option gravity="0 0 -9.81" timestep="0.002"/>
-  <asset>
-    <material name="body_mat"   rgba="0.3 0.6 0.9 1"/>
-    <material name="joint_mat"  rgba="0.9 0.5 0.2 1"/>
-    <material name="ground_mat" rgba="0.15 0.15 0.18 1"/>
-  </asset>
-  <worldbody>
-    <light pos="0 0 4" dir="0 0 -1" diffuse="1 1 1"/>
-    <geom name="floor" type="plane" size="5 5 0.1" material="ground_mat"/>
-    <body name="torso" pos="0 0 0.5">
-      <joint name="root_x" type="slide" axis="1 0 0"/>
-      <joint name="root_z" type="slide" axis="0 0 1"/>
-      <geom name="torso_geom" type="box" size="0.2 0.15 0.25" material="body_mat" mass="5"/>
-      <body name="left_thigh" pos="-0.1 0 -0.25">
-        <joint name="left_hip" type="hinge" axis="0 1 0" range="-60 60"/>
-        <geom name="left_thigh_geom" type="capsule" fromto="0 0 0 0 0 -0.3" size="0.05" material="body_mat" mass="1.5"/>
-        <body name="left_shin" pos="0 0 -0.3">
-          <joint name="left_knee" type="hinge" axis="0 1 0" range="0 120"/>
-          <geom name="left_shin_geom" type="capsule" fromto="0 0 0 0 0 -0.25" size="0.04" material="body_mat" mass="1"/>
-        </body>
-      </body>
-      <body name="right_thigh" pos="0.1 0 -0.25">
-        <joint name="right_hip" type="hinge" axis="0 1 0" range="-60 60"/>
-        <geom name="right_thigh_geom" type="capsule" fromto="0 0 0 0 0 -0.3" size="0.05" material="body_mat" mass="1.5"/>
-        <body name="right_shin" pos="0 0 -0.3">
-          <joint name="right_knee" type="hinge" axis="0 1 0" range="0 120"/>
-          <geom name="right_shin_geom" type="capsule" fromto="0 0 0 0 0 -0.25" size="0.04" material="body_mat" mass="1"/>
-        </body>
-      </body>
-    </body>
-  </worldbody>
-  <actuator>
-    <motor name="left_hip_act"   joint="left_hip"   gear="100"/>
-    <motor name="left_knee_act"  joint="left_knee"  gear="80"/>
-    <motor name="right_hip_act"  joint="right_hip"  gear="100"/>
-    <motor name="right_knee_act" joint="right_knee" gear="80"/>
-  </actuator>
-</mujoco>`;
-
-// ─────────────────────────────────────────────────────────────────────────────
-// SNIPPETS
-// ─────────────────────────────────────────────────────────────────────────────
-const SNIPPETS = [
-  { name:"6-DOF Arm", icon:"🦾", xml:`<body name="shoulder" pos="0 0 1.0">
-  <joint name="sh_pan"  type="hinge" axis="0 0 1" range="-180 180"/>
-  <geom type="cylinder" size="0.05 0.08" material="body_mat" mass="1"/>
-  <body name="upper_arm" pos="0 0 0.08">
-    <joint name="sh_lift" type="hinge" axis="0 1 0" range="-90 90"/>
-    <geom type="capsule" fromto="0 0 0 0 0 0.3" size="0.04" material="body_mat" mass="0.8"/>
-    <body name="forearm" pos="0 0 0.3">
-      <joint name="elbow" type="hinge" axis="0 1 0" range="-120 0"/>
-      <geom type="capsule" fromto="0 0 0 0 0 0.25" size="0.035" material="body_mat" mass="0.6"/>
-      <body name="wrist1" pos="0 0 0.25">
-        <joint name="wrist_roll"  type="hinge" axis="0 0 1" range="-180 180"/>
-        <joint name="wrist_pitch" type="hinge" axis="0 1 0" range="-90 90"/>
-        <joint name="wrist_yaw"   type="hinge" axis="1 0 0" range="-90 90"/>
-        <geom type="sphere" size="0.04" material="joint_mat" mass="0.3"/>
-      </body>
-    </body>
-  </body>
-</body>` },
-  { name:"Gripper", icon:"✊", xml:`<body name="gripper_base" pos="0 0 0">
-  <geom type="box" size="0.04 0.04 0.02" material="body_mat" mass="0.2"/>
-  <body name="finger_left" pos="-0.03 0 0.02">
-    <joint name="finger_left_j" type="slide" axis="1 0 0" range="0 0.04"/>
-    <geom type="box" size="0.01 0.012 0.05" material="joint_mat" mass="0.05"/>
-  </body>
-  <body name="finger_right" pos="0.03 0 0.02">
-    <joint name="finger_right_j" type="slide" axis="-1 0 0" range="0 0.04"/>
-    <geom type="box" size="0.01 0.012 0.05" material="joint_mat" mass="0.05"/>
-  </body>
-</body>` },
-  { name:"Wheeled Base", icon:"🛞", xml:`<body name="base" pos="0 0 0.1">
-  <joint name="base_x" type="slide" axis="1 0 0"/>
-  <joint name="base_y" type="slide" axis="0 1 0"/>
-  <joint name="base_yaw" type="hinge" axis="0 0 1"/>
-  <geom type="box" size="0.2 0.15 0.05" material="body_mat" mass="3"/>
-  <body name="wheel_fl" pos="-0.18 0.13 -0.05">
-    <joint name="wfl" type="hinge" axis="0 1 0"/>
-    <geom type="cylinder" size="0.06 0.02" material="joint_mat" mass="0.3"/>
-  </body>
-  <body name="wheel_fr" pos="0.18 0.13 -0.05">
-    <joint name="wfr" type="hinge" axis="0 1 0"/>
-    <geom type="cylinder" size="0.06 0.02" material="joint_mat" mass="0.3"/>
-  </body>
-</body>` },
-  { name:"IMU Sensors", icon:"📡", xml:`<!-- Add to <sensor> block -->
-<accelerometer name="imu_acc"  site="imu_site"/>
-<gyro          name="imu_gyro" site="imu_site"/>
-<!-- Add to a body: <site name="imu_site" pos="0 0 0"/> -->` },
-  { name:"Cameras", icon:"📷", xml:`<camera name="front_cam" pos="0 -1.5 1.0" xyaxes="1 0 0 0 0.5 1"/>
-<camera name="top_cam"   pos="0 0 3.0"  xyaxes="1 0 0 0 1 0"/>` },
-];
-
-// ─────────────────────────────────────────────────────────────────────────────
-// BUILT-IN PROMPT MACROS
-// ─────────────────────────────────────────────────────────────────────────────
-const BUILTIN_MACROS = [
-  { name:"Standard Sensors", icon:"📡", prompt:"Add a complete sensor suite: joint position sensors for all joints, joint velocity sensors for all joints, and an accelerometer on the torso." },
-  { name:"Mirror Left→Right", icon:"🔄", prompt:"Mirror all left-side bodies, joints and actuators to create identical right-side counterparts. Ensure symmetric naming (replace 'left' with 'right')." },
-  { name:"Add Damping",       icon:"🔧", prompt:"Add appropriate damping to all hinge joints to prevent oscillation. Use damping=1.0 for large joints and damping=0.5 for small joints." },
-  { name:"Colorize by Type",  icon:"🎨", prompt:"Set distinct rgba colors: blue (0.3 0.6 0.9 1) for torso/base bodies, orange (0.9 0.5 0.2 1) for limb segments, green (0.3 0.8 0.4 1) for end-effectors." },
-  { name:"Add Limits",        icon:"🔒", prompt:"Add realistic joint range limits to all hinge joints that are missing them. Use anatomically plausible ranges." },
-  { name:"Fix Actuators",     icon:"⚡", prompt:"Add motor actuators for every hinge and slide joint that currently lacks an actuator. Use gear=100 for large joints, gear=50 for small ones." },
-];
-
-// ─────────────────────────────────────────────────────────────────────────────
-// PYTHON EXPORT GENERATOR
-// ─────────────────────────────────────────────────────────────────────────────
-function generatePythonScript(xml) {
-  const doc = new DOMParser().parseFromString(xml, "text/xml");
-  const modelName = doc.documentElement?.getAttribute("model") || "robot";
-  const joints = [...doc.querySelectorAll("joint")].map(j => j.getAttribute("name")).filter(Boolean);
-  const actuators = [...doc.querySelectorAll("actuator > *")].map(a => a.getAttribute("name")).filter(Boolean);
-  const hingeJoints = [...doc.querySelectorAll("joint[type='hinge']")].map(j => j.getAttribute("name")).filter(Boolean);
-
-  return `"""
-MuJoCo simulation script for: ${modelName}
-Generated by MuJoCo XML Editor
-"""
-import mujoco
-import mujoco.viewer
-import numpy as np
-import time
-
-# ── Load model ────────────────────────────────────────────────────────────────
-XML = """
-${xml.replace(/`/g, "'")}
-"""
-
-model = mujoco.MjModel.from_xml_string(XML)
-data  = mujoco.MjData(model)
-
-# ── Model info ────────────────────────────────────────────────────────────────
-print(f"Model: ${modelName}")
-print(f"  Bodies:    {model.nbody}")
-print(f"  Joints:    {model.njnt}")
-print(f"  Actuators: {model.nu}")
-print(f"  DOF:       {model.nv}")
-
-# ── Joint name → index helpers ────────────────────────────────────────────────
-def joint_id(name):
-    return mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, name)
-
-def actuator_id(name):
-    return mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, name)
-
-${joints.length > 0 ? `# Joint indices
-${joints.map(j => `jid_${j.replace(/[^a-zA-Z0-9_]/g,"_")} = joint_id("${j}")`).join("\n")}` : "# No named joints found"}
-
-${actuators.length > 0 ? `# Actuator indices
-${actuators.map(a => `aid_${a.replace(/[^a-zA-Z0-9_]/g,"_")} = actuator_id("${a}")`).join("\n")}` : "# No actuators found"}
-
-# ── Simulation loop ───────────────────────────────────────────────────────────
-def controller(model, data):
-    """Apply control signals here."""
-    t = data.time
-${actuators.length > 0
-  ? actuators.map(a => `    data.ctrl[aid_${a.replace(/[^a-zA-Z0-9_]/g,"_")}] = 0.0  # TODO: set control for ${a}`).join("\n")
-  : "    pass  # No actuators"}
-
-def run_headless(duration=5.0, dt=None):
-    """Run simulation without viewer."""
-    mujoco.mj_resetData(model, data)
-    dt = dt or model.opt.timestep
-    steps = int(duration / dt)
-    print(f"\\nRunning {duration}s headless simulation ({steps} steps)...")
-    t0 = time.time()
-    for i in range(steps):
-        controller(model, data)
-        mujoco.mj_step(model, data)
-        if i % 1000 == 0:
-            print(f"  t={data.time:.2f}s  qpos={np.round(data.qpos[:4],3)}")
-    wall = time.time() - t0
-    print(f"Done. Wall time: {wall:.2f}s  ({steps/wall:.0f} steps/sec)")
-
-def run_viewer():
-    """Run simulation with interactive viewer."""
-    print("\\nLaunching viewer (close window to exit)...")
-    with mujoco.viewer.launch_passive(model, data) as v:
-        mujoco.mj_resetData(model, data)
-        while v.is_running():
-            controller(model, data)
-            mujoco.mj_step(model, data)
-            v.sync()
-
-if __name__ == "__main__":
-    import sys
-    if "--viewer" in sys.argv:
-        run_viewer()
-    else:
-        run_headless(duration=5.0)
-        print("\\nTip: run with --viewer for interactive simulation")
-`;
-}
-
-
-
-
-// ─────────────────────────────────────────────────────────────────────────────
-// THREE.JS HELPERS
-// ─────────────────────────────────────────────────────────────────────────────
-const pv=(s,d=[0,0,0])=>{if(!s)return d;const n=s.trim().split(/\s+/).map(Number);return n.length>=3?[n[0],n[1],n[2]]:d;};
-const psz=s=>{if(!s)return[0.1,0.1,0.1];return s.trim().split(/\s+/).map(Number);};
-const prgba=s=>{if(!s)return 0x4a9fd4;const[r,g,b]=s.trim().split(/\s+/).map(Number);return((Math.round(r*255)<<16)|(Math.round(g*255)<<8)|Math.round(b*255));};
-const dtr=d=>d*Math.PI/180;
-const peu=s=>{if(!s)return[0,0,0];return s.trim().split(/\s+/).map(v=>dtr(parseFloat(v)||0));};
-
-
-// ── WASM Physics simulation ───────────────────────────────────────────────────
-
-
-
-
-
-// ─────────────────────────────────────────────────────────────────────────────
-// HIGHLIGHT + DIFF + TOAST
-// ─────────────────────────────────────────────────────────────────────────────
-
-
-
-function loadStoredConfig(){
-  const active=localStorage.getItem("mujoco_provider")||"ollama";
-  const cfg={active};
-  Object.keys(PROVIDERS).forEach(p=>{
-    const key=localStorage.getItem(`mujoco_key_${p}`)||"";
-    const model=p===active?(localStorage.getItem("mujoco_model")||PROVIDERS[p].defaultModel):PROVIDERS[p].defaultModel;
-    cfg[p]={apiKey:key,model};
-  });
-  return cfg;
-}
+import { validateMuJoCoXML } from "./utils/xmlValidator";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MAIN APP
@@ -280,7 +23,7 @@ function loadStoredConfig(){
 export default function MuJoCoEditor(){
   const [xml,setXml]             = useState(DEFAULT_XML);
   const [input,setInput]         = useState("");
-  const [messages,setMessages]   = useState([{role:"assistant",content:"Hello! I'm your MuJoCo XML editor.\n\n**New:** ⚡ Macros · 🐍 Python export · 🎯 Joint axis arrows · ▶ Kinematic sim\n\nTry a macro or ask me anything about the robot."}]);
+  const [messages,setMessages]   = useState([{role:"assistant",content:"Hello! I'm your MuJoCo XML editor.\n\n**New:** ⚡ Macros · 🐍 Python export · 🎯 Joint axis arrows · ▶ Kinematic sim\n\n**How to use:** `↑` edits the XML. `QUERY` or `?` answers questions only.\n\nTry a macro, a quick prompt, or ask about DOF, mass, joints, or sensors."}]);
   const [chatHistory,setChatHistory] = useState([]);
   const [history,setHistory]     = useState([{xml:DEFAULT_XML,label:"Initial state",ts:Date.now()}]);
   const [historyIdx,setHistIdx]  = useState(0);
@@ -295,6 +38,8 @@ export default function MuJoCoEditor(){
   const [showSnippets,setShowSnippets]   = useState(false);
   const [showMacros,setShowMacros]       = useState(false);
   const [showPython,setShowPython]       = useState(false);
+  const [showManual,setShowManual]       = useState(false);
+  const [showAbout,setShowAbout]         = useState(false);
   const [providerCfg,setProviderCfg]     = useState(loadStoredConfig);
   const [ollamaModels,setOllamaModels]   = useState([]);
   const [ollamaStatus,setOllamaStatus]   = useState(false);
@@ -316,13 +61,23 @@ export default function MuJoCoEditor(){
       .then(r=>r.json()).then(d=>{setOllamaModels(d.models||[]);setOllamaStatus(true);})
       .catch(()=>setOllamaStatus(false));
   },[]);
+  useEffect(()=>{
+    const seenManual = localStorage.getItem("mujoco_manual_seen");
+    if (!seenManual) {
+      setShowManual(true);
+    }
+  },[]);
 
   const showToast=(msg,type="success")=>setToast({message:msg,type});
-  const applyVersion=idx=>{setXml(history[idx].xml);setHistIdx(idx);setDiffLines([]);setCenterTab("editor");};
-  const pushHistory=(newXml,label)=>{
-    setHistory(prev=>[...prev.slice(0,historyIdx+1),{xml:newXml,label,ts:Date.now()}]);
-    setHistIdx(prev=>prev+1);
+  const closeManual=()=>{
+    localStorage.setItem("mujoco_manual_seen","true");
+    setShowManual(false);
   };
+  const applyVersion=idx=>{setXml(history[idx].xml);setHistIdx(idx);setDiffLines([]);setCenterTab("editor");};
+  const pushHistory=useCallback((newXml,label)=>{
+    setHistory(prev=>[...prev.slice(0,historyIdx+1),{xml:newXml,label,ts:Date.now()}]);
+    setHistIdx(historyIdx+1);
+  },[historyIdx]);
   const undo=()=>{if(historyIdx>0)applyVersion(historyIdx-1);};
   const redo=()=>{if(historyIdx<history.length-1)applyVersion(historyIdx+1);};
 
@@ -331,7 +86,7 @@ export default function MuJoCoEditor(){
     const idx=xml.lastIndexOf("</worldbody>");
     const newXml=idx>=0?xml.slice(0,idx)+ins+xml.slice(idx):xml+ins;
     setXml(newXml);pushHistory(newXml,"Snippet inserted");showToast("Snippet inserted");
-  },[xml,historyIdx]);
+  },[xml,pushHistory]);
 
   const repairXML=useCallback(async(badXml,errors,provider,pCfg,attempt=1)=>{
     if(attempt>3)return badXml;
@@ -413,7 +168,7 @@ export default function MuJoCoEditor(){
       showToast(err.message,"error");
     }
     clearInterval(elapsedRef.current);setLoading(false);
-  },[input,xml,loading,historyIdx,providerCfg,chatHistory,selectedBody,elapsed,queryMode]);
+  },[input,xml,loading,providerCfg,chatHistory,selectedBody,elapsed,queryMode,pushHistory,repairXML,sendQuery]);
 
   const handleKey=e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();sendMessage();}};
   const copyXml=()=>{navigator.clipboard.writeText(xml);showToast("Copied!");};
@@ -449,7 +204,7 @@ export default function MuJoCoEditor(){
           <span style={{fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:14,color:"#7dd3fc"}}>XML Editor</span>
           <div style={{width:1,height:14,background:"#1e293b"}}/>
           {/* Provider badge */}
-          <div style={{display:"flex",alignItems:"center",gap:5,background:"#1e293b",border:`1px solid ${pInfo.color}44`,borderRadius:6,padding:"2px 9px",cursor:"pointer"}} onClick={()=>setShowSettings(true)}>
+          <div title="Provider Settings: open provider and model settings for the current AI service." style={{display:"flex",alignItems:"center",gap:5,background:"#1e293b",border:`1px solid ${pInfo.color}44`,borderRadius:6,padding:"2px 9px",cursor:"pointer"}} onClick={()=>setShowSettings(true)}>
             <span style={{fontSize:11}}>{pInfo.icon}</span>
             <span style={{fontSize:11,color:pInfo.color,fontWeight:600}}>{pInfo.label}</span>
             <span style={{fontSize:10,color:"#475569",maxWidth:110,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{providerCfg[active]?.model||""}</span>
@@ -458,12 +213,12 @@ export default function MuJoCoEditor(){
           {chatHistory.length>0&&(
             <div style={{fontSize:10,color:"#64748b",background:"#1e293b",padding:"2px 7px",borderRadius:4,border:"1px solid #334155"}}>
               💬 {chatHistory.length/2|0}t
-              <button onClick={()=>setChatHistory([])} style={{marginLeft:4,background:"none",border:"none",color:"#475569",cursor:"pointer",fontSize:10,padding:0}}>✕</button>
+              <button title="Clear Memory: remove the recent conversation context for future AI requests." onClick={()=>setChatHistory([])} style={{marginLeft:4,background:"none",border:"none",color:"#475569",cursor:"pointer",fontSize:10,padding:0}}>✕</button>
             </div>
           )}
           {/* Query mode toggle */}
           <button onClick={()=>setQueryMode(q=>!q)}
-            title="Toggle Query Mode — ask questions without editing XML"
+            title={queryMode?"Edit Mode: switch back to XML editing so prompts can change the robot.":"Query Mode: ask questions about the robot without changing the XML."}
             style={{padding:"2px 9px",background:queryMode?"rgba(59,130,246,0.2)":"#1e293b",
               color:queryMode?"#7dd3fc":"#475569",borderRadius:5,fontSize:10,
               border:`1px solid ${queryMode?"#3b82f6":"#334155"}`,cursor:"pointer",fontFamily:"inherit",fontWeight:600}}>
@@ -478,21 +233,25 @@ export default function MuJoCoEditor(){
           </div>
         </div>
         <div style={{display:"flex",gap:5,alignItems:"center"}}>
-          <button className="btn" onClick={()=>setShowMacros(true)}
+          <button className="btn" title="User Manual: open the quick start guide for new users." onClick={()=>setShowManual(true)}
+            style={{padding:"3px 9px",background:"#1e293b",color:"#7dd3fc",borderRadius:5,fontSize:11,border:"1px solid #334155"}}>📘 Manual</button>
+          <button className="btn" title="About Developer: open the developer profile page." onClick={()=>setShowAbout(true)}
+            style={{padding:"3px 9px",background:"#1e293b",color:"#94a3b8",borderRadius:5,fontSize:11,border:"1px solid #334155"}}>ℹ About</button>
+          <button className="btn" title="Macros: open reusable edit prompts for common MuJoCo changes." onClick={()=>setShowMacros(true)}
             style={{padding:"3px 9px",background:"#1e293b",color:"#eab308",borderRadius:5,fontSize:11,border:"1px solid #334155"}}>⚡ Macros</button>
-          <button className="btn" onClick={()=>setShowSnippets(true)}
+          <button className="btn" title="Snippet Library: insert saved XML building blocks into the current model." onClick={()=>setShowSnippets(true)}
             style={{padding:"3px 9px",background:"#1e293b",color:"#a78bfa",borderRadius:5,fontSize:11,border:"1px solid #334155"}}>📦</button>
-          <button className="btn" onClick={()=>setShowPython(true)}
+          <button className="btn" title="Python Export: generate a Python simulation script from the current XML." onClick={()=>setShowPython(true)}
             style={{padding:"3px 9px",background:"#1e293b",color:"#86efac",borderRadius:5,fontSize:11,border:"1px solid #334155"}}>🐍 Python</button>
-          <button className="btn" onClick={undo} disabled={historyIdx===0}
+          <button className="btn" title="Undo: restore the previous XML version from history." onClick={undo} disabled={historyIdx===0}
             style={{padding:"3px 9px",background:historyIdx===0?"#1e293b":"#1e3a5f",color:historyIdx===0?"#334155":"#7dd3fc",borderRadius:5,fontSize:11,border:"1px solid",borderColor:historyIdx===0?"#1e293b":"#2d5f8a"}}>↩</button>
-          <button className="btn" onClick={redo} disabled={historyIdx>=history.length-1}
+          <button className="btn" title="Redo: reapply the next XML version from history." onClick={redo} disabled={historyIdx>=history.length-1}
             style={{padding:"3px 9px",background:historyIdx>=history.length-1?"#1e293b":"#1e3a5f",color:historyIdx>=history.length-1?"#334155":"#7dd3fc",borderRadius:5,fontSize:11,border:"1px solid",borderColor:historyIdx>=history.length-1?"#1e293b":"#2d5f8a"}}>↪</button>
-          <button className="btn" onClick={()=>setShowSettings(true)}
+          <button className="btn" title="Settings: manage providers, API keys, and model selection." onClick={()=>setShowSettings(true)}
             style={{padding:"3px 9px",background:"#1e293b",color:"#94a3b8",borderRadius:5,fontSize:11,border:"1px solid #334155"}}>⚙</button>
-          <button className="btn" onClick={copyXml}
+          <button className="btn" title="Copy XML: copy the current MuJoCo XML to the clipboard." onClick={copyXml}
             style={{padding:"3px 9px",background:"#1e293b",color:"#94a3b8",borderRadius:5,fontSize:11,border:"1px solid #334155"}}>⎘</button>
-          <button className="btn" onClick={downloadXml}
+          <button className="btn" title="Download XML: save the current robot model as an XML file." onClick={downloadXml}
             style={{padding:"3px 9px",background:"#1e3a5f",color:"#7dd3fc",borderRadius:5,fontSize:11,border:"1px solid #2d5f8a"}}>↓ .xml</button>
         </div>
       </div>
@@ -535,18 +294,23 @@ export default function MuJoCoEditor(){
             )}
             <div ref={chatEndRef}/>
           </div>
-          <div style={{padding:"7px 9px",borderTop:"1px solid #1e293b",background:"#0a0f1a"}}>
-            {selectedBody&&(
-              <div style={{marginBottom:5,padding:"3px 7px",background:"rgba(251,191,36,0.1)",borderRadius:4,border:"1px solid rgba(251,191,36,0.2)",fontSize:11,color:"#fbbf24",display:"flex",justifyContent:"space-between"}}>
-                <span>🟡 {selectedBody}</span>
-                <button onClick={()=>{setSelectedBody(null);setInput(i=>i.replace(/^Modify the ".*?" body: /,""));}} style={{background:"none",border:"none",color:"#64748b",cursor:"pointer",fontSize:11}}>✕</button>
+	          <div style={{padding:"7px 9px",borderTop:"1px solid #1e293b",background:"#0a0f1a"}}>
+	            <div style={{marginBottom:6,padding:"5px 7px",background:queryMode?"rgba(59,130,246,0.08)":"rgba(34,197,94,0.08)",border:"1px solid",borderColor:queryMode?"#1e3a5f":"#166534",borderRadius:6,fontSize:10,lineHeight:1.5,color:queryMode?"#7dd3fc":"#86efac"}}>
+	              {queryMode
+	                ? "QUERY mode: ask about DOF, mass, joints, sensors, or structure. The XML will not change."
+	                : "EDIT mode: describe a change to the robot or scene, then send with ↑ to update the XML."}
+	            </div>
+	            {selectedBody&&(
+	              <div style={{marginBottom:5,padding:"3px 7px",background:"rgba(251,191,36,0.1)",borderRadius:4,border:"1px solid rgba(251,191,36,0.2)",fontSize:11,color:"#fbbf24",display:"flex",justifyContent:"space-between"}}>
+	                <span>🟡 {selectedBody}</span>
+                <button title="Clear Body Focus: stop targeting this selected body in edit prompts." onClick={()=>{setSelectedBody(null);setInput(i=>i.replace(/^Modify the ".*?" body: /,""));}} style={{background:"none",border:"none",color:"#64748b",cursor:"pointer",fontSize:11}}>✕</button>
               </div>
             )}
             <div style={{display:"flex",gap:5,alignItems:"flex-end"}}>
               <textarea value={input} onChange={e=>setInput(e.target.value)} onKeyDown={handleKey}
                 placeholder={queryMode?"Ask a question about the robot…":"Describe a change…"} rows={3}
                 style={{flex:1,background:"#1e293b",border:`1px solid ${queryMode?"#3b82f6":"#334155"}`,borderRadius:8,color:"#e2e8f0",padding:"6px 8px",fontSize:12,lineHeight:1.5,fontFamily:"inherit",minHeight:56}}/>
-              <button className="btn" onClick={()=>sendMessage()} disabled={loading||!input.trim()}
+              <button className="btn" title={queryMode?"Ask Question: send this prompt as a read-only question about the robot.":"Send Edit: ask the AI to modify the XML using this prompt."} onClick={()=>sendMessage()} disabled={loading||!input.trim()}
                 style={{padding:"6px 9px",background:loading||!input.trim()?"#1e293b":queryMode?"#3b82f6":pInfo.color,
                   color:loading||!input.trim()?"#334155":"#fff",borderRadius:8,fontSize:18,border:"none",height:56,width:40,opacity:loading||!input.trim()?0.4:1}}>
                 {loading?"…":queryMode?"?":"↑"}
@@ -559,26 +323,26 @@ export default function MuJoCoEditor(){
         {/* CENTER */}
         <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",minWidth:0}}>
           <div style={{display:"flex",alignItems:"center",borderBottom:"1px solid #1e293b",background:"#0f172a",padding:"0 12px",height:36,flexShrink:0,gap:2}}>
-            <button className={`tab ${centerTab==="editor"?"on":""}`} onClick={()=>setCenterTab("editor")}>◉ XML</button>
-            <button className={`tab ${centerTab==="diff"?"on":""}`} onClick={()=>setCenterTab("diff")}>
+            <button className={`tab ${centerTab==="editor"?"on":""}`} title="XML Editor: view and directly edit the current MuJoCo XML." onClick={()=>setCenterTab("editor")}>◉ XML</button>
+            <button className={`tab ${centerTab==="diff"?"on":""}`} title="Diff View: compare the latest XML changes line by line." onClick={()=>setCenterTab("diff")}>
               ± Diff {diffLines.filter(d=>d.type!=="same").length>0&&
                 <span style={{background:"#1e3a5f",color:"#7dd3fc",borderRadius:3,padding:"1px 4px",marginLeft:3,fontSize:9}}>
                   {diffLines.filter(d=>d.type!=="same").length}
                 </span>}
             </button>
-            <button className={`tab ${centerTab==="3d"?"on":""}`} onClick={()=>setCenterTab("3d")}>
+            <button className={`tab ${centerTab==="3d"?"on":""}`} title="3D Viewer: inspect the robot visually and preview scene changes." onClick={()=>setCenterTab("3d")}>
               ◈ 3D{!validation.valid&&<span style={{marginLeft:2,color:"#fca5a5",fontSize:9}}>!</span>}
             </button>
             {/* 3D controls (only shown in 3D tab) */}
             {centerTab==="3d"&&(
               <div style={{marginLeft:8,display:"flex",gap:5}}>
-                <button onClick={()=>setShowAxes(a=>!a)}
+                <button title={showAxes?"Hide Joint Axes: remove joint axis helpers from the 3D viewer.":"Show Joint Axes: display hinge and slide axes in the 3D viewer."} onClick={()=>setShowAxes(a=>!a)}
                   style={{padding:"2px 8px",background:showAxes?"rgba(239,68,68,0.15)":"#1e293b",
                     color:showAxes?"#ef4444":"#475569",borderRadius:4,fontSize:10,
                     border:`1px solid ${showAxes?"#7f1d1d":"#334155"}`,cursor:"pointer",fontFamily:"inherit"}}>
                   🎯 Axes
                 </button>
-                <button onClick={()=>setSimulating(s=>!s)}
+                <button title={simulating?"Stop Simulation: pause the kinematic motion preview in the 3D viewer.":"Start Simulation: animate the robot with a kinematic motion preview."} onClick={()=>setSimulating(s=>!s)}
                   style={{padding:"2px 8px",background:simulating?"rgba(34,197,94,0.15)":"#1e293b",
                     color:simulating?"#86efac":"#475569",borderRadius:4,fontSize:10,
                     border:`1px solid ${simulating?"#166534":"#334155"}`,cursor:"pointer",fontFamily:"inherit"}}>
@@ -613,9 +377,9 @@ export default function MuJoCoEditor(){
         {/* RIGHT */}
         <div style={{width:242,display:"flex",flexDirection:"column",borderLeft:"1px solid #1e293b",background:"#0d1525",flexShrink:0}}>
           <div style={{display:"flex",borderBottom:"1px solid #1e293b",height:36}}>
-            <button className={`tab ${panel==="tree"?"on":""}`}    style={{flex:1}} onClick={()=>setPanel("tree")}>Tree</button>
-            <button className={`tab ${panel==="history"?"on":""}`} style={{flex:1}} onClick={()=>setPanel("history")}>Hist</button>
-            <button className={`tab ${panel==="info"?"on":""}`}    style={{flex:1}} onClick={()=>setPanel("info")}>Info</button>
+            <button className={`tab ${panel==="tree"?"on":""}`} title="Body Tree: browse bodies, joints, and geoms in the current robot." style={{flex:1}} onClick={()=>setPanel("tree")}>Tree</button>
+            <button className={`tab ${panel==="history"?"on":""}`} title="History: review and restore previous XML versions." style={{flex:1}} onClick={()=>setPanel("history")}>Hist</button>
+            <button className={`tab ${panel==="info"?"on":""}`} title="Info: open usage tips, quick edit prompts, and query examples." style={{flex:1}} onClick={()=>setPanel("info")}>Info</button>
           </div>
 
           {panel==="tree"&&(
@@ -660,14 +424,23 @@ export default function MuJoCoEditor(){
             </div>
           )}
 
-          {panel==="info"&&(
-            <div style={{flex:1,overflowY:"auto",padding:"9px"}}>
-              <div style={{fontSize:10,color:"#475569",marginBottom:7,letterSpacing:"0.06em",textTransform:"uppercase"}}>Quick Prompts</div>
-              {["Add an arm with 3 joints","Add a camera sensor","Make all geoms red","Add a ball on floor",
-                "Double hip actuator gear","Add touch sensors","Add a second robot 2m right",
+	          {panel==="info"&&(
+	            <div style={{flex:1,overflowY:"auto",padding:"9px"}}>
+              <div style={{padding:"8px 9px",marginBottom:10,background:"#111827",border:"1px solid #334155",borderRadius:7}}>
+                <div style={{fontSize:10,color:"#475569",marginBottom:6,letterSpacing:"0.06em",textTransform:"uppercase"}}>How To Use</div>
+                <div style={{fontSize:11,color:"#cbd5e1",lineHeight:1.6}}>
+                  <div><span style={{color:"#86efac",fontWeight:700}}>↑ Edit mode</span> changes the XML.</div>
+                  <div><span style={{color:"#7dd3fc",fontWeight:700}}>QUERY / ?</span> answers questions only.</div>
+                  <div style={{color:"#94a3b8"}}>Quick Prompts switch to edit mode. Query Examples switch to query mode.</div>
+                  <div style={{color:"#94a3b8"}}>Use <span style={{color:"#7dd3fc"}}>📘 Manual</span> for the full quick-start guide and <span style={{color:"#cbd5e1"}}>ℹ About</span> for the developer page.</div>
+                </div>
+              </div>
+	              <div style={{fontSize:10,color:"#475569",marginBottom:7,letterSpacing:"0.06em",textTransform:"uppercase"}}>Quick Prompts</div>
+	              {["Add an arm with 3 joints","Add a camera sensor","Make all geoms red","Add a ball on floor",
+	                "Double hip actuator gear","Add touch sensors","Add a second robot 2m right",
                 "Remove all actuators","Change torso to sphere","Add wrist to the arm",
               ].map((ex,i)=>(
-                <div key={i} onClick={()=>setInput(ex)}
+                <div key={i} onClick={()=>{setQueryMode(false);setInput(ex);}}
                   style={{padding:"5px 7px",background:"#1e293b",borderRadius:5,fontSize:11,color:"#94a3b8",marginBottom:4,cursor:"pointer",border:"1px solid #334155",transition:"all 0.15s"}}
                   onMouseEnter={e=>{e.currentTarget.style.background="#253451";e.currentTarget.style.color="#cbd5e1";}}
                   onMouseLeave={e=>{e.currentTarget.style.background="#1e293b";e.currentTarget.style.color="#94a3b8";}}>
@@ -694,6 +467,8 @@ export default function MuJoCoEditor(){
         </div>
       </div>
 
+      {showManual&&<UserManualModal onClose={closeManual}/>}
+      {showAbout&&<AboutDeveloperModal onClose={()=>setShowAbout(false)}/>}
       {showSettings&&<SettingsModal onClose={()=>setShowSettings(false)} providerCfg={providerCfg} setProviderCfg={setProviderCfg} ollamaModels={ollamaModels} ollamaStatus={ollamaStatus}/>}
       {showSnippets&&<SnippetModal onClose={()=>setShowSnippets(false)} onInsert={insertSnippet} customSnippets={customSnippets} setCustomSnippets={setCustomSnippets}/>}
       {showMacros&&<MacroModal onClose={()=>setShowMacros(false)} onRun={p=>{setQueryMode(false);sendMessage(p);}} customMacros={customMacros} setCustomMacros={setCustomMacros}/>}

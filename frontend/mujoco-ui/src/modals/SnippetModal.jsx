@@ -1,4 +1,8 @@
 
+import { useState } from "react";
+
+import { SNIPPETS } from "../editorConfig";
+
 // ─────────────────────────────────────────────────────────────────────────────
 // SNIPPET MODAL
 // ─────────────────────────────────────────────────────────────────────────────
@@ -16,11 +20,11 @@ function SnippetModal({onClose,onInsert,customSnippets,setCustomSnippets}){
       <div style={{background:"#0f172a",border:"1px solid #1e293b",borderRadius:12,width:560,maxHeight:"88vh",overflow:"auto",padding:22,fontFamily:"'JetBrains Mono',monospace"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
           <span style={{fontSize:14,fontWeight:700,color:"#f1f5f9"}}>📦 Snippet Library</span>
-          <button onClick={onClose} style={{background:"none",border:"none",color:"#475569",fontSize:18,cursor:"pointer"}}>✕</button>
+          <button title="Close Snippet Library: return to the editor without inserting anything." onClick={onClose} style={{background:"none",border:"none",color:"#475569",fontSize:18,cursor:"pointer"}}>✕</button>
         </div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:14}}>
           {all.map((s,i)=>(
-            <div key={i} style={{background:"#1e293b",borderRadius:8,padding:12,border:"1px solid #334155",cursor:"pointer",transition:"all 0.15s"}}
+            <div key={i} title={`Insert Snippet: add "${s.name}" into the current XML.`} style={{background:"#1e293b",borderRadius:8,padding:12,border:"1px solid #334155",cursor:"pointer",transition:"all 0.15s"}}
               onClick={()=>{onInsert(s.xml);onClose();}}
               onMouseEnter={e=>e.currentTarget.style.borderColor="#7dd3fc"}
               onMouseLeave={e=>e.currentTarget.style.borderColor="#334155"}>
@@ -37,7 +41,7 @@ function SnippetModal({onClose,onInsert,customSnippets,setCustomSnippets}){
             style={{width:"100%",background:"#1e293b",border:"1px solid #334155",color:"#e2e8f0",padding:"6px 10px",borderRadius:6,fontSize:12,fontFamily:"inherit",outline:"none",marginBottom:7}}/>
           <textarea value={newXml} onChange={e=>setNewXml(e.target.value)} placeholder="XML…" rows={3}
             style={{width:"100%",background:"#1e293b",border:"1px solid #334155",color:"#e2e8f0",padding:"6px 10px",borderRadius:6,fontSize:11,fontFamily:"inherit",outline:"none",resize:"vertical",marginBottom:7}}/>
-          <button onClick={save} disabled={!newName.trim()||!newXml.trim()}
+          <button title="Save Snippet: store this custom XML snippet for reuse." onClick={save} disabled={!newName.trim()||!newXml.trim()}
             style={{padding:"6px 16px",background:"#3b82f6",color:"#fff",border:"none",borderRadius:6,cursor:"pointer",fontSize:12,fontFamily:"inherit"}}>Save</button>
         </div>
       </div>

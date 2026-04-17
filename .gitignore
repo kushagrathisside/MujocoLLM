@@ -3,3 +3,6 @@ venv
 __pycache__/
 
 *.env
+.codex
+/package-lock.json
+/App_backup_jsx.md

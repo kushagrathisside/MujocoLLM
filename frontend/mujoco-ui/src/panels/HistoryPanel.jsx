@@ -12,7 +12,8 @@ function HistoryPanel({ history, historyIdx, applyVersion }) {
           style={{
             padding:"7px 12px",
             cursor:"pointer",
-            fontSize:11
+            fontSize:11,
+            color:i===historyIdx?"#7dd3fc":"inherit"
           }}
         >
           {entry.label}

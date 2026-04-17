@@ -1,5 +1,7 @@
+import { dtr } from "./math";
+
 // We simulate kinematically using sine-wave joint motion (no WASM required)
-export function kinematicStep(xmlDoc, t, jointStates) {
+export function kinematicStep(xmlDoc, t) {
   // Returns map of joint name → angle (radians) for hinge joints
   const result = {};
   [...(xmlDoc?.querySelectorAll("joint[type='hinge']")||[])].forEach((j,i) => {

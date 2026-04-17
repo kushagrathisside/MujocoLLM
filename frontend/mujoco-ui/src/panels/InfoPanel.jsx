@@ -23,7 +23,7 @@ function InfoPanel({ setInput, setQueryMode }) {
       {examples.map((ex,i)=>(
         <div
           key={i}
-          onClick={()=>setInput(ex)}
+          onClick={()=>{setQueryMode(false);setInput(ex);}}
           style={{
             padding:"5px 7px",
             background:"#1e293b",

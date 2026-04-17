@@ -4,24 +4,15 @@ Providers: Ollama · Anthropic · OpenAI · Gemini · Groq
 Features:  Multi-turn history · Robot-aware context · Auto-repair loop
 """
 
-from pyexpat.errors import messages
-import os, json, re
-from unittest import result
-import xml
-from xml.parsers.expat import model
+import os
 import httpx
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
 from dotenv import load_dotenv
-from typing import Optional, List
-from schemas.requests import EditRequest, QueryRequest, HistoryMsg
-from llm.json_parser import extract_json
-from llm.providers import call_ollama, call_openai, call_anthropic, call_gemini, call_groq
+from schemas.requests import EditRequest, QueryRequest
+
 load_dotenv()
 
-from mjcf.patch_engine import apply_xml_patch
-from mjcf.validator import validate_mjcf
 from services.editor_service import process_edit
 from services.query_service import process_query
 from mjcf.analyzer import analyze_robot_structure
@@ -92,43 +83,6 @@ async def edit_xml(req: EditRequest):
 
     return await process_edit(req, SYSTEM_PROMPT)
 
-# ── Natural Language Query endpoint (read-only, no XML edit) ──────────────────
-
-QUERY_SYSTEM = """You are a MuJoCo robotics expert. Answer questions about MuJoCo XML robot models clearly and concisely.
-Do NOT modify any XML. Do NOT return JSON. Just answer the question in plain text."""
-
-async def call_query(prompt: str, provider: str, model: str, api_key: str = "") -> str:
-    msgs = [{"role": "user", "content": prompt}]
-    if provider == "ollama":
-        payload = {"model": model or OLLAMA_MODEL, "stream": False,
-                   "options": {"temperature": 0.2, "num_predict": 1024},
-                   "messages": [{"role": "system", "content": QUERY_SYSTEM}] + msgs}
-        async with httpx.AsyncClient(timeout=300.0) as c:
-            r = await c.post(f"{OLLAMA_BASE_URL}/api/chat", json=payload)
-        return r.json().get("message", {}).get("content", "")
-    elif provider == "anthropic":
-        payload = {"model": model or "claude-sonnet-4-20250514", "max_tokens": 1024,
-                   "system": QUERY_SYSTEM, "messages": msgs}
-        headers = {"x-api-key": api_key, "anthropic-version": "2023-06-01", "content-type": "application/json"}
-        async with httpx.AsyncClient(timeout=60.0) as c:
-            r = await c.post("https://api.anthropic.com/v1/messages", json=payload, headers=headers)
-        return "".join(b.get("text","") for b in r.json().get("content",[]))
-    elif provider == "openai":
-        payload = {"model": model or "gpt-4o", "temperature": 0.2, "max_tokens": 1024,
-                   "messages": [{"role":"system","content":QUERY_SYSTEM}]+msgs}
-        async with httpx.AsyncClient(timeout=60.0) as c:
-            r = await c.post("https://api.openai.com/v1/chat/completions", json=payload,
-                             headers={"Authorization": f"Bearer {api_key}"})
-        return r.json()["choices"][0]["message"]["content"]
-    elif provider == "groq":
-        payload = {"model": model or "llama-3.3-70b-versatile", "temperature": 0.2, "max_tokens": 1024,
-                   "messages": [{"role":"system","content":QUERY_SYSTEM}]+msgs}
-        async with httpx.AsyncClient(timeout=60.0) as c:
-            r = await c.post("https://api.groq.com/openai/v1/chat/completions", json=payload,
-                             headers={"Authorization": f"Bearer {api_key}"})
-        return r.json()["choices"][0]["message"]["content"]
-    return "Provider not supported for queries."
-
 @app.post("/query")
 async def query_xml(req: QueryRequest):
 
@@ -163,7 +117,9 @@ async def kinematic_path(req: EditRequest, start: str, end: str):
         "path": path
     }
 
+# Backward-compatible alias for an earlier typo plus the correct public route.
 @app.post("/covert/urdf")
+@app.post("/convert/urdf")
 async def convert_urdf(urdf: str):
 
     mjcf = urdf_to_mjcf(urdf)

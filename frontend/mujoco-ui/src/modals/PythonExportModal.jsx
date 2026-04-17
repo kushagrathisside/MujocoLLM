@@ -1,4 +1,8 @@
 
+import { useMemo } from "react";
+
+import { generatePythonScript } from "../editorConfig";
+
 // ─────────────────────────────────────────────────────────────────────────────
 // PYTHON EXPORT MODAL
 // ─────────────────────────────────────────────────────────────────────────────
@@ -7,8 +11,10 @@ function PythonExportModal({onClose, xml}){
   const copy=()=>{navigator.clipboard.writeText(code);};
   const download=()=>{
     const a=document.createElement("a");
-    a.href=URL.createObjectURL(new Blob([code],{type:"text/plain"}));
+    const url=URL.createObjectURL(new Blob([code],{type:"text/plain"}));
+    a.href=url;
     a.download="simulate_robot.py";a.click();
+    URL.revokeObjectURL(url);
   };
   return(
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.8)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center"}}>
@@ -19,9 +25,9 @@ function PythonExportModal({onClose, xml}){
             <div style={{fontSize:11,color:"#475569",marginTop:2}}>Ready to run with: <code style={{color:"#86efac"}}>pip install mujoco</code></div>
           </div>
           <div style={{display:"flex",gap:8}}>
-            <button onClick={copy} style={{padding:"6px 14px",background:"#1e293b",color:"#94a3b8",border:"1px solid #334155",borderRadius:6,cursor:"pointer",fontSize:12,fontFamily:"inherit"}}>⎘ Copy</button>
-            <button onClick={download} style={{padding:"6px 14px",background:"#1e3a5f",color:"#7dd3fc",border:"1px solid #2d5f8a",borderRadius:6,cursor:"pointer",fontSize:12,fontFamily:"inherit"}}>↓ Download</button>
-            <button onClick={onClose} style={{background:"none",border:"none",color:"#475569",fontSize:18,cursor:"pointer"}}>✕</button>
+            <button title="Copy Python Script: copy the generated simulation code to the clipboard." onClick={copy} style={{padding:"6px 14px",background:"#1e293b",color:"#94a3b8",border:"1px solid #334155",borderRadius:6,cursor:"pointer",fontSize:12,fontFamily:"inherit"}}>⎘ Copy</button>
+            <button title="Download Python Script: save the generated simulation code as a file." onClick={download} style={{padding:"6px 14px",background:"#1e3a5f",color:"#7dd3fc",border:"1px solid #2d5f8a",borderRadius:6,cursor:"pointer",fontSize:12,fontFamily:"inherit"}}>↓ Download</button>
+            <button title="Close Python Export: return to the editor." onClick={onClose} style={{background:"none",border:"none",color:"#475569",fontSize:18,cursor:"pointer"}}>✕</button>
           </div>
         </div>
         <div style={{flex:1,overflow:"auto",padding:0}}>

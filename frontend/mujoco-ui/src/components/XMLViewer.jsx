@@ -1,7 +1,6 @@
 import React from "react";
-import { highlightXML } from "../utils/highlightXML";
 
-function XMLViewer({ xml, setXml, setDiffLines, validation }) {
+function XMLViewer({ xml, setXml, setDiffLines }) {
 
   const xmlLines = xml.split("\n");
 
@@ -39,27 +38,6 @@ function XMLViewer({ xml, setXml, setDiffLines, validation }) {
           </div>
 
           <div style={{flex:1,position:"relative"}}>
-
-            <div
-              style={{
-                position:"absolute",
-                inset:0,
-                padding:"12px 12px",
-                fontSize:12,
-                lineHeight:"20px",
-                pointerEvents:"none",
-                whiteSpace:"pre",
-                fontFamily:"inherit",
-                color:"transparent",
-                overflow:"hidden"
-              }}
-            >
-              <div
-                dangerouslySetInnerHTML={{__html:highlightXML(xml)}}
-                style={{color:"inherit"}}
-              />
-            </div>
-
             <textarea
               value={xml}
               onChange={e=>{
@@ -72,7 +50,7 @@ function XMLViewer({ xml, setXml, setDiffLines, validation }) {
                 inset:0,
                 width:"100%",
                 height:"100%",
-                background:"transparent",
+                background:"#0a0f1a",
                 border:"none",
                 color:"#e2e8f0",
                 caretColor:"#7dd3fc",

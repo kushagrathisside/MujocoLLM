@@ -1,80 +1,175 @@
 # MuJoCo XML Editor
 
-LLM-powered editor with live 3D preview, multi-provider support, and version history.
+MuJoCo XML Editor is a full-stack AI assistant for editing MuJoCo robot XML. It lets you describe a change in plain language, preview the result in 3D, inspect the diff, validate the XML, and export a Python simulation script from the browser.
 
-## Providers
+## What You Get
 
-| Provider  | Key needed | Recommended model         |
-|-----------|-----------|---------------------------|
-| 🦙 Ollama | No        | qwen2.5:14b (local)       |
-| ◆ Anthropic | Yes     | claude-sonnet-4-20250514  |
-| ⬡ OpenAI  | Yes       | gpt-4o                    |
-| ✦ Gemini  | Yes       | gemini-1.5-pro            |
-| ⚡ Groq    | Yes       | llama-3.3-70b-versatile   |
+- Natural-language MuJoCo XML editing
+- Read-only query mode for questions like DOF, mass, and structure
+- Live 3D viewer with body selection
+- XML diff view and version history
+- Validation warnings and error detection
+- Prompt macros and snippet library
+- Python export for simulation workflows
+- Multi-provider support: Ollama, OpenAI, Anthropic, Gemini, and Groq
 
----
+## Project Layout
+
+```text
+MujocoLLM/
+├── backend/                  FastAPI backend
+├── frontend/mujoco-ui/       React + Vite frontend
+├── requirements.txt          Python dependencies
+├── README.md
+└── README_documentation.md   Extended manual / technical reference
+```
+
+## Prerequisites
+
+- Python 3.10+
+- Node.js 18+
+- npm 9+
+- Optional: Ollama for local model usage
 
 ## Setup
 
-### 1. Ollama (local, no internet needed)
+### 1. Backend
+
+From the repository root:
+
+```bash
+cd /home/pro2024001/MujocoLLM
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env
+cd backend
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
+```
+
+Notes:
+
+- `requirements.txt` lives at the repository root, not inside `backend/`.
+- `.env.example` also lives at the repository root.
+- The backend serves the editor API on `http://localhost:8000`.
+
+### 2. Frontend
+
+In a second terminal:
+
+```bash
+cd /home/pro2024001/MujocoLLM/frontend/mujoco-ui
+npm install
+npm run dev -- --host 0.0.0.0 --port 5173
+```
+
+Open:
+
+```text
+http://localhost:5173
+```
+
+## Optional: Ollama Local Models
+
+If you want fully local editing/query support:
+
 ```bash
 # macOS
 brew install ollama
+
 # Linux
 curl -fsSL https://ollama.com/install.sh | sh
 
-ollama pull qwen2.5:14b
+ollama serve
+ollama pull qwen2.5:7b
 ```
 
-### 2. Backend
+The frontend checks Ollama availability through the backend and lists local models in Settings.
+
+## Daily Run Commands
+
+After the first install, you usually only need:
+
+Backend:
+
 ```bash
+cd /home/pro2024001/MujocoLLM
+source venv/bin/activate
 cd backend
-pip install -r requirements.txt
-cp .env.example .env       # edit if needed
 uvicorn main:app --reload --port 8000
 ```
 
-### 3. Frontend
+Frontend:
+
 ```bash
-npm create vite@latest mujoco-ui -- --template react
-cd mujoco-ui && npm install
-# Copy mujoco-editor.jsx → src/App.jsx
-# Add to vite.config.js: optimizeDeps: { include: ['three'] }
-npm install three
+cd /home/pro2024001/MujocoLLM/frontend/mujoco-ui
 npm run dev
 ```
 
-Open http://localhost:5173
+## How To Use
 
----
+- `EDIT` mode changes the XML.
+- `QUERY` mode answers questions without changing the XML.
+- The left chat panel sends your prompt to the selected provider.
+- The center tabs switch between XML, Diff, and 3D preview.
+- The right panel shows the body tree, version history, and quick tips.
+- New users see an in-app User Manual popup on first launch.
 
-## Features
+## Provider Support
 
-- **3D Preview** — live Three.js visualisation of geoms/bodies, drag to orbit, scroll to zoom
-- **XML Validation** — instant error/warning panel (body missing geom, bad joint refs, etc.)
-- **Multi-provider** — switch between Ollama, Anthropic, OpenAI, Gemini, Groq in ⚙ Settings
-- **API key storage** — keys saved in browser localStorage, never sent to any third party
-- **Diff view** — line-by-line coloured diff after every LLM edit
-- **Version history** — full undo/redo tree, click any past version to restore
-- **Direct editing** — edit XML by hand; 3D view and validation update instantly
+| Provider | Edit XML | Query XML | API key required |
+|----------|----------|-----------|------------------|
+| Ollama   | Yes      | Yes       | No               |
+| OpenAI   | Yes      | Yes       | Yes |
+| Anthropic| Yes      | Yes       | Yes |
+| Gemini   | Yes      | Yes       | Yes |
+| Groq     | Yes      | Yes       | Yes |
 
----
+## Key API Endpoints
 
-## Architecture
+Backend routes currently used by the UI:
 
-```
-React UI (localhost:5173)
-  ├─ Provider Settings modal  →  localStorage (API keys, active provider)
-  ├─ POST /edit { xml, prompt, provider, model, api_key }
-  │      ↓
-  FastAPI (localhost:8000)
-  ├─ /api/chat  →  Ollama (localhost:11434)     [no key]
-  ├─ /v1/messages → Anthropic API               [key from request]
-  ├─ /v1/chat/completions → OpenAI API          [key from request]
-  ├─ /generateContent → Gemini API              [key from request]
-  └─ /openai/v1/chat/completions → Groq API     [key from request]
-         ↓
-  JSON { strategy, reasoning, xml, changes }
-         ↓
-  React: update XML + run validation + rebuild Three.js scene + push history
-```
+- `GET /health`
+- `GET /ollama/models`
+- `POST /edit`
+- `POST /query`
+- `POST /analyze`
+- `POST /graph`
+- `POST /kinematics/path`
+
+## Troubleshooting
+
+### Frontend starts but no edits happen
+
+- Check whether `QUERY` mode is enabled.
+- In query mode, the app answers questions and does not modify XML.
+
+### Ollama not detected
+
+- Make sure `ollama serve` is running.
+- Check `http://localhost:11434/api/tags`.
+
+### Backend import errors
+
+- Activate the virtual environment before starting Uvicorn.
+- Install dependencies from the root `requirements.txt`.
+
+### Blank or stale browser title / assets
+
+- Hard-refresh the page after frontend changes.
+
+## Documentation
+
+For the full technical walkthrough, feature reference, and design notes, see:
+
+- [README_documentation.md](./README_documentation.md)
+
+## License
+
+This project is licensed under **PolyForm Noncommercial 1.0.0**.
+
+- Educational, research, and other noncommercial use is allowed.
+- Commercial use is not allowed under this license.
+- This is **source-available**, not an OSI open-source license.
+
+See [LICENSE](./LICENSE) for the full terms.

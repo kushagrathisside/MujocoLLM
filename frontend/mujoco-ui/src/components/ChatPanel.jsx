@@ -2,15 +2,10 @@ import React from "react";
 
 function ChatPanel({
   messages,
-  loading,
-  elapsed,
-  queryMode,
   input,
   setInput,
   sendMessage,
-  handleKey,
-  selectedBody,
-  setSelectedBody
+  handleKey
 }) {
 
   return (
