@@ -1,6 +1,6 @@
-# MuJoCo XML Editor
+# MuJoCo Copilot — AI-Powered Robot Design Studio
 
-MuJoCo XML Editor is a full-stack AI assistant for editing MuJoCo robot XML. It lets you describe a change in plain language, preview the result in 3D, inspect the diff, validate the XML, and export a Python simulation script from the browser.
+MuJoCo Copilot is a full-stack AI assistant for editing MuJoCo robot XML. It lets you describe a change in plain language, preview the result in 3D, inspect the diff, validate the XML, and export a Python simulation script from the browser.
 
 ## What You Get
 
@@ -16,7 +16,7 @@ MuJoCo XML Editor is a full-stack AI assistant for editing MuJoCo robot XML. It 
 ## Project Layout
 
 ```text
-MujocoLLM/
+mujoco-copilot/
 ├── backend/                  FastAPI backend
 ├── frontend/mujoco-ui/       React + Vite frontend
 ├── requirements.txt          Python dependencies
@@ -38,7 +38,7 @@ MujocoLLM/
 From the repository root:
 
 ```bash
-cd /home/pro2024001/MujocoLLM
+cd ./mujoco-copilot
 python -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
@@ -58,7 +58,7 @@ Notes:
 In a second terminal:
 
 ```bash
-cd /home/pro2024001/MujocoLLM/frontend/mujoco-ui
+cd ./mujoco-copilot/frontend/mujoco-ui
 npm install
 npm run dev -- --host 0.0.0.0 --port 5173
 ```
@@ -93,7 +93,7 @@ After the first install, you usually only need:
 Backend:
 
 ```bash
-cd /home/pro2024001/MujocoLLM
+cd mujoco-copilot
 source venv/bin/activate
 cd backend
 uvicorn main:app --reload --port 8000
@@ -102,7 +102,7 @@ uvicorn main:app --reload --port 8000
 Frontend:
 
 ```bash
-cd /home/pro2024001/MujocoLLM/frontend/mujoco-ui
+cd mujoco-copilot/frontend/mujoco-ui
 npm run dev
 ```
 
